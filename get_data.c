@@ -13,6 +13,8 @@
 #include <time.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <errno.h>
+
 
 
 #define MM2S_CONTROL_REGISTER 0x00
@@ -27,11 +29,22 @@
 
 
 #define SOURCE_REG  0x0e000000
-#define TARGET_REG  0x557d2db000
+// #define TARGET_REG  0x0f000000
+#define TARGET_REG  0x81000000
 
-#define DATA_SIZE 32*10/8 
 
-#define MAP_SIZE 65535
+// #define DATA_SIZE 32*10/8 
+#define DATA_SIZE 512
+
+// #define MAP_SIZE 65535
+#define MAP_SIZE 4096UL
+#define MAP_MASK (MAP_SIZE - 1)
+
+
+
+
+#define FATAL do { fprintf(stderr, "Error at line %d, file %s (%d) [%s]\n", \
+  __LINE__, __FILE__, errno, strerror(errno)); exit(1); } while(0)
 
 
 const int NUM_TRIALS = 1;
@@ -74,9 +87,9 @@ int dma_s2mm_sync(unsigned int* dma_virtual_address) {
         // dma_mm2s_status(dma_virtual_address);
 
         s2mm_status = dma_get(dma_virtual_address, S2MM_STATUS_REGISTER);
-        // break;
-        if (i==1) break;
-        else i=i+1;
+        break;
+        // if (i==1) break;
+        // else i=i+1;
     }
     // printf("%3d \n",i);
 }
@@ -181,50 +194,59 @@ int main() {
 
     // void* p = sbrk(MAP_SIZE);
     // printf("%p \n",p);
-    char *p = malloc(MAP_SIZE);
-    printf("%p \n",p);
+    // char *p = malloc(MAP_SIZE);
+    // printf("%p \n",p);
     // printf("%x \n",(int64_t*)p);
 
 
 
     int dh = open("/dev/mem", O_RDWR | O_SYNC); // Open /dev/mem which represents the whole physical memory
     unsigned int* virtual_address = mmap(NULL, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, dh, 0x80000000); // Memory map AXI Lite register block
-    unsigned int* virtual_destination_address = mmap(NULL, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, dh,0x5500000000 ); // Memory map destination address
-    
-    
+    if(virtual_address == (void *) -1) FATAL;  
+
+    unsigned int* virtual_destination_address = mmap(NULL, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, dh,TARGET_REG & ~MAP_MASK ); // Memory map destination address
+    if(virtual_destination_address == (void *) -1) FATAL;  
+
+
+    // unsigned int *virtual_destination_address = (unsigned int*) malloc(DATA_SIZE);
+    // printf("%d \n",virtual_destination_address);
 
 
 
     memset(virtual_destination_address, 0xff, DATA_SIZE); // Clear destination block
+    printf("Destination memory block: "); print_16Words(virtual_destination_address, DATA_SIZE);
 
-    // printf("Destination memory block: "); print_16Words(virtual_destination_address, DATA_SIZE);
 
-    // printf("Resetting DMA\n");
-    // dma_set(virtual_address, S2MM_CONTROL_REGISTER, 4);
-    // dma_s2mm_status(virtual_address);
 
-    // printf("Halting DMA\n");
-    // dma_set(virtual_address, S2MM_CONTROL_REGISTER, 0);
-    // dma_s2mm_status(virtual_address);
 
-    // printf("Writing destination address\n");
-    // dma_set(virtual_address, S2MM_DESTINATION_ADDRESS, TARGET_REG); // Write destination address
-    // dma_s2mm_status(virtual_address);
+    printf("Resetting DMA\n");
+    dma_set(virtual_address, S2MM_CONTROL_REGISTER, 4);
+    dma_s2mm_status(virtual_address);
+
+    printf("Halting DMA\n");
+    dma_set(virtual_address, S2MM_CONTROL_REGISTER, 0);
+    dma_s2mm_status(virtual_address);
+
+    printf("Writing destination address\n");
+    dma_set(virtual_address, S2MM_DESTINATION_ADDRESS, (unsigned int)virtual_destination_address); // Write destination address
+    dma_s2mm_status(virtual_address);
 
     // struct timespec tick, tock;
 
 
-    // data.values[0] = 1;
-    // ret = ioctl(req.fd,GPIOHANDLE_SET_LINE_VALUES_IOCTL,&data);
+    data.values[0] = 1;
 
+
+    ret = ioctl(req.fd,GPIOHANDLE_SET_LINE_VALUES_IOCTL,&data);
+    printf("helloworld \n");
 
     // assert( !clock_gettime(CLOCK_MONOTONIC, &tick) );
-    // dump_Data(virtual_address);
+    dump_Data(virtual_address);
     // sleep(1);
     // assert( !clock_gettime(CLOCK_MONOTONIC, &tock) );
 
-    // // printf("Destination memory block: "); memdump(virtual_destination_address, DATA_SIZE);
-    // printf("Destination memory block: "); print_16Words(virtual_destination_address, DATA_SIZE);
+    // printf("Destination memory block: "); memdump(virtual_destination_address, DATA_SIZE);
+    printf("Destination memory block: "); print_16Words(virtual_destination_address, DATA_SIZE);
 
 
 
@@ -246,8 +268,8 @@ int main() {
 
 
 
-    // data.values[0] = 0;
-    // ret = ioctl(req.fd,GPIOHANDLE_SET_LINE_VALUES_IOCTL,&data);
+    data.values[0] = 0;
+    ret = ioctl(req.fd,GPIOHANDLE_SET_LINE_VALUES_IOCTL,&data);
 
 
 }
