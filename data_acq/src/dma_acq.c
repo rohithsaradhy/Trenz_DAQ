@@ -28,13 +28,15 @@ int dma_s2mm_sync(unsigned int* dma_virtual_address) {
 
     int i=0;
     while(!(s2mm_status & 1<<12) || !(s2mm_status & 1<<1)){
-        dma_s2mm_status(dma_virtual_address);
+        // dma_s2mm_status(dma_virtual_address);
         // dma_mm2s_status(dma_virtual_address);
 
         s2mm_status = dma_get(dma_virtual_address, S2MM_STATUS_REGISTER);
-        break;
-        // if (i==1) break;
-        // else i=i+1;
+        // break;
+        usleep(100);
+
+        if (i==20){ printf("Transfer failed, aborting after 20 sync cycles\n"); break;}
+        else i=i+1;
     }
     // printf("%3d \n",i);
 }
@@ -116,8 +118,10 @@ int print_16Words(void* virtual_address, int byte_count)
     int mod_num = 1;
     int word_byte = 4;
     for (offset = 0; offset < byte_count; offset=offset+word_byte) {
-        if(offset % (4*mod_num) == 0 & (offset != 0) ) {printf("\n",offset);}
+        if(offset % (4*mod_num) == 0 & (offset != 0) ) {printf(" ",offset);}
         printf("%" PRIu64,p[3+offset]<<24|p[2+offset]<<16|p[1+offset]<<8|p[0+offset]);
+        // printf("%x" PRIu64,p[3+offset]<<24|p[2+offset]<<16|p[1+offset]<<8|p[0+offset]);
+
         printf(" ");
     }
     printf("\n");
@@ -163,10 +167,12 @@ unsigned int* transfer_Data(int mem_fd, unsigned int target_address)
 
 
     // printf("Waiting for S2MM sychronization...\n");
-    dma_set(virtual_address, S2MM_CONTROL_REGISTER, 0x0001);
-    dma_set(virtual_address, S2MM_LENGTH, DATA_SIZE);
+    dma_set(virtual_address, S2MM_CONTROL_REGISTER, 0x0001); //start
+    dma_set(virtual_address, S2MM_LENGTH, DATA_SIZE); //set length
     dma_s2mm_sync(virtual_address); // If this locks up make sure all memory ranges are assigned under Address Editor!
-    dma_set(virtual_address, S2MM_CONTROL_REGISTER, 0x000);
+    dma_set(virtual_address, S2MM_CONTROL_REGISTER, 0x0000); //stop
+    // dma_set(virtual_address, S2MM_CONTROL_REGISTER, 4); //reset
+
 
 
     return virtual_destination_address;
@@ -176,15 +182,15 @@ unsigned int* transfer_Data(int mem_fd, unsigned int target_address)
 
 int write_toFile(FILE* fp,  void* virtual_address, int byte_count) { 
 int offset;
+uint64_t val,val_prev;
 char *p = virtual_address;
 int mod_num = 16;
 for (offset = 0; offset < byte_count; offset=offset+4) {
     fprintf(fp,"%" PRIu64  ,p[3+offset]<<24|p[2+offset]<<16|p[1+offset]<<8|p[0+offset]);
     // fprintf(fp,",");
     fprintf(fp,"\n");
-
 }
-    fprintf(fp,"$$$$$$$$\n");
+    fprintf(fp,"\n");
 // fprintf(fp,"%" PRIu64 "\n",("val1[mem_no]+value[mem_no]"));
 
 return 0;

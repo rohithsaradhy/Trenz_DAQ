@@ -36,7 +36,7 @@
 // #define DATA_SIZE 32*10/8 
 // #define DATA_SIZE 512*1/8
 // #define DATA_SIZE (8000/8+3)*32
-#define DATA_SIZE 1008*4
+#define DATA_SIZE 1032*4
 
 
 
