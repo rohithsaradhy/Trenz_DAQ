@@ -10,6 +10,8 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <stdint.h>
+#include <sys/types.h>
 
 
 #include <sys/stat.h>
@@ -36,15 +38,24 @@
 // #define DATA_SIZE 32*10/8 
 // #define DATA_SIZE 512*1/8
 // #define DATA_SIZE (8000/8+3)*32
-#define DATA_SIZE 1032*4
+#define DATA_SIZE 8*1048576 //1MB
 
+#define DMA_SIZE 65535UL
+#define MAP_SIZE 8388608  //1MB
 
+#define LONG_MEM MAP_SIZE*20 //160MB
 
-// #define MAP_SIZE 65536UL
-#define MAP_SIZE 32768UL
-
+// #define MAP_SIZE 32768UL
 // #define MAP_SIZE 4096UL
 #define MAP_MASK (MAP_SIZE - 1)
+
+
+
+struct dma_data {
+  unsigned int*  virtual_dma_addr;
+  unsigned int*  virtual_destination_addr;
+  unsigned int   data_collected;
+};
 
 
 
@@ -64,12 +75,14 @@ void dma_mm2s_status(unsigned int* dma_virtual_address);
 void memdump(void* virtual_address, int byte_count);
 
 int print_16Words(void* virtual_address, int byte_count);
-int dump_Data(unsigned int* virtual_address);  
+int dump_Data(struct dma_data *dd);
 
 
 
-unsigned int* transfer_Data(int mem_fd, unsigned int target_address) ;
-
+unsigned int* transfer_Data(int mem_fd, unsigned int target_address,struct dma_data *dd) ;
 
 
 int write_toFile(FILE* fp,  void* virtual_address, int byte_count);
+
+
+

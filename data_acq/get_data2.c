@@ -59,6 +59,27 @@ int gpio_close()
     return 0;
 };
 
+
+
+int reset_fpga()
+{
+    pins_vals[0] = 1; // Reset
+    pins_vals[1] = 0;
+    pins_vals[2] = 0;
+    pins_vals[3] = 0;
+    set_gpio(pins_vals);
+    usleep(1000);
+    pins_vals[0] = 0;
+    pins_vals[1] = 0;
+    pins_vals[2] = 0;
+    pins_vals[3] = 0;
+    set_gpio(pins_vals);
+    usleep(1000);
+    return 0;
+}
+
+
+
 int main(int argc, char** argv) {
 
 
@@ -91,7 +112,7 @@ int main(int argc, char** argv) {
 
 
     gpio_init();
-    pins_vals[0] = 0;
+    pins_vals[0] = 1; // Reset
     pins_vals[1] = 0;
     pins_vals[2] = 0;
     pins_vals[3] = 0;
@@ -100,7 +121,8 @@ int main(int argc, char** argv) {
     int mem_fd = open("/dev/mem", O_RDWR | O_SYNC); // Open /dev/mem which represents the whole physical memory
    
 
-    unsigned int* vda;
+    unsigned int* vda1;
+    unsigned int* vda2;
 
     char file_name1[100]="data_files/ddmtd1.txt";
     char file_name2[100]="data_files/ddmtd2.txt";
@@ -114,48 +136,80 @@ int main(int argc, char** argv) {
     fp1 = fopen(file_name1,"a");
     fp2 = fopen(file_name2,"a");
     
+    usleep(1000);
+    pins_vals[0] = 0;
+    pins_vals[1] = 0;
+    pins_vals[2] = 0;
+    pins_vals[3] = 0;
+    set_gpio(pins_vals);
+    // usleep(10000);
+
+
+    struct dma_data dd1;
+    unsigned int total_data = 0;
 
 
 
 
-    // // data.values[0] = 1; //Reset
-    // // data.values[1] = 1; //S_Axis_ENABLE
-    // // data.values[2] = 1; //S_Axis_ENABLE
-    // // ret = ioctl(req.fd,GPIOHANDLE_SET_LINE_VALUES_IOCTL,&data);
-
-    // // mydelay(1000);
+    char* memory_LongStore = (char *)mmap(NULL,LONG_MEM , PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd,0x4d000000); // Memory map destination address
+    if(memory_LongStore == (void *) -1) printf("FATAL");  
+    memset(memory_LongStore, 0xff, LONG_MEM);
 
 
 
-    for(int i=0;i<N;i=i+1)
+    clock_t t; 
+    t = clock(); 
+
+
+
+
+    transfer_Data(mem_fd,0x4a000000,&dd1);//  0x40000000 is where the CMA is 
+    // printf("Destination memory block: "); print_16Words(dd1.virtual_destination_addr, dd1.data_collected);
+    // write_toFile( fp1, dd1.virtual_destination_addr, dd1.data_collected);
+
+
+    memcpy(memory_LongStore+total_data,dd1.virtual_destination_addr,dd1.data_collected);
+    total_data +=dd1.data_collected;
+    // printf("%u is the data_collected\n",dd1.data_collected);
+    memset(dd1.virtual_destination_addr, 0xff, dd1.data_collected );
+
+
+
+
+
+    for(int i=0;i<N-1;i=i+1)
+
     {
+
+
+     
+        dump_Data(&dd1);
+        // printf("Destination memory block: "); print_16Words(dd1.virtual_destination_addr, dd1.data_collected);
         
-        pins_vals[0] = 0;
-        pins_vals[1] = 0;
-        pins_vals[2] = 1;
-        pins_vals[3] = 0;
-        set_gpio(pins_vals);
-
-
-        vda = transfer_Data(mem_fd,0x6e000000) ;
-        write_toFile( fp1, vda, DATA_SIZE);
-        // printf("Destination memory block: "); print_16Words(vda, DATA_SIZE);
-        // printf("Destination memory block: "); memdump(vda, DATA_SIZE);
-
-
-        usleep(100);
-        pins_vals[0] = 0;
-        pins_vals[1] = 1;
-        pins_vals[2] = 0;
-        pins_vals[3] = 0;
-        set_gpio(pins_vals);
-
-        usleep(100);
-        vda = transfer_Data(mem_fd,0x7e000000) ;
-        write_toFile( fp2, vda, DATA_SIZE);
-        // printf("Destination memory block: "); print_16Words(vda, DATA_SIZE);
-        // printf("Destination memory block: "); memdump(vda, DATA_SIZE);
+        
+        // write_toFile( fp1, dd1.virtual_destination_addr, dd1.data_collected);
+        
+        memcpy(memory_LongStore+total_data,dd1.virtual_destination_addr,dd1.data_collected);
+        memset(dd1.virtual_destination_addr, 0xff, dd1.data_collected );
+        total_data +=dd1.data_collected;
     }
+
+
+    t = clock()-t; 
+    double time_taken = ((double)t)/CLOCKS_PER_SEC; // in seconds 
+  
+    printf("transfered at %f MBps for %u cycles \n",total_data /( (N)*time_taken *1024 *1024),N); 
+
+
+    write_toFile( fp1, memory_LongStore, total_data);
+
+
+
+
+    munmap((void *)memory_LongStore,LONG_MEM);
+    munmap((void *)dd1.virtual_destination_addr, (size_t)DATA_SIZE);
+    munmap((void *)dd1.virtual_dma_addr, (size_t)DATA_SIZE);
+    close(mem_fd);
     fclose(fp1);
     fclose(fp2);
 
@@ -167,26 +221,5 @@ int main(int argc, char** argv) {
 
     return 0;
 
-
-
-
-    // data.values[1] = 0; //Choose DDMTD_Sampler
-    // data.values[0] = 1; //Reset
-    // ret = ioctl(req.fd,GPIOHANDLE_SET_LINE_VALUES_IOCTL,&data);
-    // sleep(1);
-
-    // data.values[0] = 0; //Reset
-    // data.values[1] = 1; //Choose DDMTD_Sampler
-    // ret = ioctl(req.fd,GPIOHANDLE_SET_LINE_VALUES_IOCTL,&data);
-    // vda = transfer_Data(mem_fd,0x6e000000) ;
-    // printf("Destination memory block: "); memdump(vda, DATA_SIZE);
-
- 
-
-
-
-    // data.values[0] = 0;
-    // data.values[1] = 0;
-    // ret = ioctl(req.fd,GPIOHANDLE_SET_LINE_VALUES_IOCTL,&data);
 
 }
