@@ -136,72 +136,83 @@ int main(int argc, char** argv) {
     fp1 = fopen(file_name1,"a");
     fp2 = fopen(file_name2,"a");
     
+ 
+
+
+
+
+    unsigned int *dma_addr = mmap(NULL, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED,mem_fd,DMA_ADDR ); // Memory map AXI Lite register block
+    if(dma_addr == (void *) -1) {printf("FATAL DMA ADDR"); return 0;};  
+    
+    struct dma_data dd1; //create a dma_data struct with all necessary information
+    dd1.mem_fd = mem_fd;//File Descriptor for /dev/mem
+    dd1.target_addr =  0x4a000000; //destination for DMA to copy the data
+    dd1.virtual_dma_addr = dma_addr;
+    init_dma(&dd1); // initialize DMA transfer...
+
+
+
+    char* memory_LongStore = (char *)mmap(NULL,LONG_MEM , PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd,0x4b000000); // Memory map destination address
+    if(memory_LongStore == (void *) -1) {printf("FATAL LONG MEM"); return 0;};  
+    memset(memory_LongStore, 0xff, LONG_MEM);
+
+
+
+
+ //Setting reset to be zero
     usleep(1000);
     pins_vals[0] = 0;
     pins_vals[1] = 0;
     pins_vals[2] = 0;
     pins_vals[3] = 0;
     set_gpio(pins_vals);
-    // usleep(10000);
+    usleep(10000);
 
 
-    struct dma_data dd1;
-    unsigned int total_data = 0;
+  
 
-
-
-
-    char* memory_LongStore = (char *)mmap(NULL,LONG_MEM , PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd,0x4d000000); // Memory map destination address
-    if(memory_LongStore == (void *) -1) printf("FATAL");  
-    memset(memory_LongStore, 0xff, LONG_MEM);
-
-
-
-    clock_t t; 
-    t = clock(); 
+    suseconds_t tic,toc;
+    suseconds_t time_taken;
+    struct timeval current_time;
+    gettimeofday(&current_time,NULL); 
+    tic = current_time.tv_usec;
 
 
 
 
-    transfer_Data(mem_fd,0x4a000000,&dd1);//  0x40000000 is where the CMA is 
-    // printf("Destination memory block: "); print_16Words(dd1.virtual_destination_addr, dd1.data_collected);
-    // write_toFile( fp1, dd1.virtual_destination_addr, dd1.data_collected);
-
-
-    memcpy(memory_LongStore+total_data,dd1.virtual_destination_addr,dd1.data_collected);
-    total_data +=dd1.data_collected;
-    // printf("%u is the data_collected\n",dd1.data_collected);
-    memset(dd1.virtual_destination_addr, 0xff, dd1.data_collected );
-
-
-
-
-
-    for(int i=0;i<N-1;i=i+1)
-
+    for(int i=0;i<N;i=i+1)
     {
-
-
-     
-        dump_Data(&dd1);
+        transfer_Data(&dd1); //transfer data
         // printf("Destination memory block: "); print_16Words(dd1.virtual_destination_addr, dd1.data_collected);
-        
-        
-        // write_toFile( fp1, dd1.virtual_destination_addr, dd1.data_collected);
-        
-        memcpy(memory_LongStore+total_data,dd1.virtual_destination_addr,dd1.data_collected);
+        // write_toFile( fp1, dd1.virtual_destination_addr, dd1.data_collected);        
+
+        memcpy(memory_LongStore+(dd1.total_data-dd1.data_collected),dd1.virtual_destination_addr,dd1.data_collected);
         memset(dd1.virtual_destination_addr, 0xff, dd1.data_collected );
-        total_data +=dd1.data_collected;
+
+
+        usleep(1000);
+
+        // t_clock = clock(); 
+        // time_taken = ((double)t_clock - t)/CLOCKS_PER_SEC; // in seconds 
+        // t = t_clock;
+        // printf("iter %u transfered at %f MBps \n",i+1,dd1.data_collected /( time_taken *1024 *1024)); 
+        // sleep(1);
     }
 
-
-    t = clock()-t; 
-    double time_taken = ((double)t)/CLOCKS_PER_SEC; // in seconds 
-  
-    printf("transfered at %f MBps for %u cycles \n",total_data /( (N)*time_taken *1024 *1024),N); 
+    
 
 
-    write_toFile( fp1, memory_LongStore, total_data);
+    gettimeofday(&current_time,NULL); 
+    toc = current_time.tv_usec; 
+    time_taken = ((toc-tic)); // in useconds 
+
+    printf("Total data Transfered %f KB \n",(float)(dd1.total_data)/(1024));
+    printf("Total time Transfered %u us \n",time_taken);
+    printf("transfered at %u KBps \n",dd1.total_data * 1000000 /(time_taken * 1024 )); 
+    
+    write_toFile( fp1, memory_LongStore, dd1.total_data);
+
+
 
 
 

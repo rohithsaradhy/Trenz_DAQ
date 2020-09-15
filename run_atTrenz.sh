@@ -14,7 +14,8 @@ sshpass -p "root" ssh -T $HOST << EOF
 cd data_acq
 chmod +x compile.sh
 ./compile.sh
-./get_data2 $2
+# nice --20 ./get_data2 $2
+nice --20 ./get_data_bram $2
 
 # ./get_data_driver $2
 

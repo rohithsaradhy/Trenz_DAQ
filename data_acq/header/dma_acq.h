@@ -7,6 +7,8 @@
 #include <sys/ioctl.h>
 #include <linux/gpio.h>
 #include <time.h>
+#include <sys/time.h>
+
 #include <assert.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -38,12 +40,12 @@
 // #define DATA_SIZE 32*10/8 
 // #define DATA_SIZE 512*1/8
 // #define DATA_SIZE (8000/8+3)*32
-#define DATA_SIZE 8*1048576 //1MB
+#define DATA_SIZE 8*1048576 //8MB
 
 #define DMA_SIZE 65535UL
-#define MAP_SIZE 8388608  //1MB
+#define MAP_SIZE 8*1048576  //8MB
 
-#define LONG_MEM MAP_SIZE*20 //160MB
+#define LONG_MEM MAP_SIZE*32 //256MB
 
 // #define MAP_SIZE 32768UL
 // #define MAP_SIZE 4096UL
@@ -52,9 +54,20 @@
 
 
 struct dma_data {
+
+  // virtual addresses
+  int target_addr;
+
+  // /dev/mem file descriptor
+  int mem_fd;
+
+  // address data 
   unsigned int*  virtual_dma_addr;
   unsigned int*  virtual_destination_addr;
+
+  //data collected stuff
   unsigned int   data_collected;
+  unsigned int   total_data;
 };
 
 
@@ -77,9 +90,9 @@ void memdump(void* virtual_address, int byte_count);
 int print_16Words(void* virtual_address, int byte_count);
 int dump_Data(struct dma_data *dd);
 
+int init_dma(struct dma_data *dd);
 
-
-unsigned int* transfer_Data(int mem_fd, unsigned int target_address,struct dma_data *dd) ;
+void transfer_Data(struct dma_data *dd) ;
 
 
 int write_toFile(FILE* fp,  void* virtual_address, int byte_count);

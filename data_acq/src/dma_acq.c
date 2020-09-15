@@ -36,7 +36,8 @@ int dma_s2mm_sync(unsigned int* dma_virtual_address) {
 
         if (i==1000){ printf("Transfer failed, aborting after 1000 sync cycles\n"); break;}
         else i=i+1;
-        usleep(1000);
+
+        usleep(100);
 
     }
     // printf("%3d \n",i);
@@ -116,7 +117,7 @@ int print_16Words(void* virtual_address, int byte_count)
     printf("\n");
     uint64_t val1;
 
-    int mod_num = 4;
+    int mod_num = 8;
     int word_byte = 4;
     for (offset = 0; offset < byte_count; offset=offset+word_byte) {
         val1 = (uint64_t)(0xffffffff&((p[3+offset]&0b01111111)<<24|p[2+offset]<<16|p[1+offset]<<8|p[0+offset]));
@@ -126,7 +127,9 @@ int print_16Words(void* virtual_address, int byte_count)
         // if(1)
         // if(val1!=0x7fffffff)
         {
-        printf("%" PRIu64,val1);
+        printf("%10" PRIu64,val1);
+        // printf("%02x%02x%02x%02x",p[offset+3],p[offset+2], p[offset+1],p[offset]);
+
         printf(" ");
 
         }
@@ -141,9 +144,10 @@ int dump_Data(struct dma_data *dd)
 {
  
     // printf("Waiting for S2MM sychronization...\n");
-    dma_set(dd->virtual_dma_addr, S2MM_CONTROL_REGISTER, 0x0001);
+    // dma_set(dd->virtual_dma_addr, S2MM_CONTROL_REGISTER, 0x0001);
     dma_set(dd->virtual_dma_addr, S2MM_LENGTH, DATA_SIZE);
     dma_s2mm_sync(dd->virtual_dma_addr); // If this locks up make sure all memory ranges are assigned under Address Editor!
+
     dd->data_collected = dma_get(dd->virtual_dma_addr, S2MM_LENGTH);
 
 
@@ -151,50 +155,37 @@ int dump_Data(struct dma_data *dd)
 
 
 
-unsigned int* transfer_Data(int mem_fd, unsigned int target_address,struct dma_data *dd) 
+int init_dma(struct dma_data *dd)
+{
+    dd->total_data = 0;
+    dd->data_collected = 0;
+
+    dd->virtual_destination_addr = mmap(NULL, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, dd->mem_fd,dd->target_addr); // Memory map destination address
+    if(dd->virtual_dma_addr == (void *) -1) {printf("FATAL DESTINATION ADDR"); return 0;};  
+    memset(dd->virtual_destination_addr, 0xff, DATA_SIZE); // Clear destination block
+    
+    dma_set(dd->virtual_dma_addr, S2MM_CONTROL_REGISTER, 4); //Reset DMA
+    usleep(1000); //need to wait for the reset to work...   
+    dma_set(dd->virtual_dma_addr, S2MM_CONTROL_REGISTER, 0); //Halt  DMA
+    // dma_s2mm_status(dd->virtual_dma_addr);
+
+    dma_set(dd->virtual_dma_addr, S2MM_DESTINATION_ADDRESS, dd->target_addr); // Write Target Addr for the DMA to copy to
+
+    dma_set(dd->virtual_dma_addr, S2MM_CONTROL_REGISTER, 0x0001); //start the DMA
+}
+
+void transfer_Data(struct dma_data *dd) 
 {
 
- 
-    unsigned int* virtual_address = mmap(NULL, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd,DMA_ADDR ); // Memory map AXI Lite register block
-    if(virtual_address == (void *) -1) printf("FATAL");   
-   
-   
-    unsigned int* virtual_destination_address = mmap(NULL, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, mem_fd,target_address); // Memory map destination address
-    if(virtual_destination_address == (void *) -1) printf("FATAL");  
 
+    dma_set(dd->virtual_dma_addr, S2MM_LENGTH, DATA_SIZE); //set length
+    dma_s2mm_sync(dd->virtual_dma_addr); // If this locks up make sure all memory ranges are assigned under Address Editor!
 
-    memset(virtual_destination_address, 0xff, DATA_SIZE); // Clear destination block
-    // printf("Destination memory block: "); print_16Words(virtual_destination_address, DATA_SIZE);
+    dd->data_collected = dma_get(dd->virtual_dma_addr, S2MM_LENGTH);
+    dd->total_data = dd->total_data + dd->data_collected;
 
-
-    // // printf("Resetting DMA\n");
-    // dma_set(virtual_address, S2MM_CONTROL_REGISTER, 4);
-    // // dma_s2mm_status(virtual_address);
-
-    // // printf("Halting DMA\n");
-    // dma_set(virtual_address, S2MM_CONTROL_REGISTER, 0);
-    // // dma_s2mm_status(virtual_address);
-
-    // printf("Writing destination address\n");
-    dma_set(virtual_address, S2MM_DESTINATION_ADDRESS, target_address); // Write destination address
-    // dma_s2mm_status(virtual_address);
-
-
-
-    // printf("Waiting for S2MM sychronization...\n");
-    dma_set(virtual_address, S2MM_CONTROL_REGISTER, 0x0001); //start
-    dma_set(virtual_address, S2MM_LENGTH, DATA_SIZE); //set length
-    dma_s2mm_sync(virtual_address); // If this locks up make sure all memory ranges are assigned under Address Editor!
-    dma_set(virtual_address, S2MM_CONTROL_REGISTER, 0x0000); //stop
-    // dma_set(virtual_address, S2MM_CONTROL_REGISTER, 4); //reset
-    // printf("Value of S2MM_LENGTH is %u",dma_get(virtual_address, S2MM_LENGTH));
-
-
-    dd->virtual_dma_addr = virtual_address;
-    dd->virtual_destination_addr = virtual_destination_address;
-    dd->data_collected = dma_get(virtual_address, S2MM_LENGTH);
     // printf("%u \t %u \n",virtual_address,virtual_destination_address);
-    return 0;
+
 }
 
 
@@ -205,13 +196,14 @@ uint64_t val1,val2;
 uint64_t val_prev;
 
 char *p = virtual_address;
-    int mod_num = 32;
+    int mod_num = 8;
     int word_byte = 4;
     for (offset = 0; offset < byte_count; offset=offset+word_byte){
 
   val1 = (uint64_t)(0xffffffff&((p[3+offset]&0b01111111)<<24|p[2+offset]<<16|p[1+offset]<<8|p[0+offset]));
+//   val2 = (uint64_t)(0xffffffff&((p[3+offset+mod_num*word_byte]&0b01111111)<<24|p[2+offset+mod_num*word_byte]<<16|p[1+offset+mod_num*word_byte]<<8|p[0+offset+mod_num*word_byte]));
 
-
+    // if(val1!=val2)
     {
         
         fprintf(fp,"%" PRIu64",",((p[3+offset]>>7)&0b1));
