@@ -155,7 +155,7 @@ fp3 = fopen(file_name3,"a");
 
 
 const uint ADDR_MAP_SIZE =4*8192UL ;
-uint num_words = 500; //Should not exceed write depth
+uint num_words = 1000; //Should not exceed write depth
 uint read_width = 256;
 uint bytes_transferred = read_width*num_words/8;
 
@@ -228,7 +228,7 @@ for (int i =0; i < iter; i=i+1 )
 
     stop_data_transfer();
     // printf("%u \n ",);
-    usleep(10000); // Adjusting this will give time for the FIFO to fill up
+    usleep(1000); // Adjusting this will give time for the FIFO to fill up
 
 
     
@@ -239,8 +239,8 @@ toc = clock();
 cpu_time_used = ((double) (toc - tic)) / CLOCKS_PER_SEC;
 
 printf("Total CPU Time Taken %f \n",cpu_time_used);
-printf("Total Data Collected %f KB\n",(double)(total_data_inBytes/(1024)));
-printf("Transfer Speed is %f MB \n",(double)(total_data_inBytes/(cpu_time_used*1024*1024)));
+printf("Total Data Collected %f KB\n",(double)(3*total_data_inBytes/(1024)));
+printf("Transfer Speed is %f MBps \n",(double)(3*total_data_inBytes/(cpu_time_used*1024*1024)));
 
 
 
